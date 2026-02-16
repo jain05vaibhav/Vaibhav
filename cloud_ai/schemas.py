@@ -42,3 +42,4 @@ class CloudOutput(BaseModel):
     fault_contributing_factors: list[str]
 
     recommendation: Recommendation
+    history_points_used: int = 0
