@@ -47,11 +47,9 @@ class EndToEndCloudAITests(unittest.TestCase):
             rul_vector = pd.DataFrame(
                 [
                     {
-                        "thermal_stress_index": payload.thermal_stress_index,
-                        "brake_health_index": payload.brake_rul_pct / 100.0,
-                        "mechanical_vibration_anomaly_score": payload.mechanical_vibration_anomaly_score,
-                        "electrical_charging_efficiency_score": payload.electrical_charging_efficiency_score,
-                        "vehicle_health_score": payload.vehicle_health_score,
+                        "engine_rul_pct": payload.engine_rul_pct,
+                        "brake_rul_pct": payload.brake_rul_pct,
+                        "battery_rul_pct": payload.battery_rul_pct,
                     }
                 ]
             )[RUL_FEATURES]
