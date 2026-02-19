@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import joblib
@@ -11,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 
 from cloud_ai.explanation import explain_fault
 from cloud_ai.failure_model import FAILURE_FEATURES
-from cloud_ai.history import blend, build_history_provider_from_env, summarize_history
+from cloud_ai.history import InMemoryHistoryProvider, NoopHistoryProvider, blend, summarize_history
 from cloud_ai.recommendation import recommend_action
 from cloud_ai.rul_model import RUL_FEATURES
 from cloud_ai.schemas import CloudInput, CloudOutput
@@ -39,24 +38,18 @@ def load_models() -> None:
     ModelRegistry.rul_model = joblib.load(RUL_MODEL_PATH)
     ModelRegistry.failure_model = joblib.load(FAILURE_MODEL_PATH)
     if ModelRegistry.history_provider is None:
-        ModelRegistry.history_provider = build_history_provider_from_env()
+        ModelRegistry.history_provider = NoopHistoryProvider()
 
 
 @app.get("/health")
 def health() -> dict[str, str | int]:
-    backend_name = ModelRegistry.history_provider.__class__.__name__
-    if backend_name == "MongoHistoryProvider":
-        history_backend = "mongo"
-    elif backend_name == "InMemoryHistoryProvider":
-        history_backend = "memory"
-    else:
-        history_backend = "none"
+    history_backend = "memory" if isinstance(ModelRegistry.history_provider, InMemoryHistoryProvider) else "none"
     return {
         "status": "ok",
         "mode": "advisory-only",
         "authority": "cloud_has_no_actuation_control",
         "history_backend": history_backend,
-        "history_window_size": int(os.getenv("HISTORY_WINDOW_SIZE", "50")),
+        "history_window_size": 50,
     }
 
 
@@ -66,9 +59,9 @@ def analyze(data: CloudInput) -> CloudOutput:
         raise HTTPException(status_code=503, detail="Models are not loaded")
 
     if ModelRegistry.history_provider is None:
-        ModelRegistry.history_provider = build_history_provider_from_env()
+        ModelRegistry.history_provider = NoopHistoryProvider()
 
-    history_limit = int(os.getenv("HISTORY_WINDOW_SIZE", "50"))
+    history_limit = 50
     history_records = ModelRegistry.history_provider.fetch_recent(data.vehicle_id, history_limit)
     history_snapshot = summarize_history(history_records)
 

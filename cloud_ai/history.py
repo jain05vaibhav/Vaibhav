@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -30,7 +29,7 @@ class NoopHistoryProvider:
 
 
 class InMemoryHistoryProvider:
-    """Simple in-process store, useful for local testing without MongoDB."""
+    """Simple in-process store, useful for local/testing history-aware inference."""
 
     def __init__(self) -> None:
         self._records: list[dict] = []
@@ -42,29 +41,6 @@ class InMemoryHistoryProvider:
 
     def save_record(self, record: dict) -> None:
         self._records.append(dict(record))
-
-
-class MongoHistoryProvider:
-    """MongoDB-backed history provider for Section-6 cloud records."""
-
-    def __init__(
-        self,
-        uri: str,
-        database: str,
-        collection: str,
-        timeout_ms: int = 2000,
-    ) -> None:
-        from pymongo import MongoClient
-
-        self.client = MongoClient(uri, serverSelectionTimeoutMS=timeout_ms)
-        self.collection = self.client[database][collection]
-
-    def fetch_recent(self, vehicle_id: str, limit: int) -> list[dict]:
-        cursor = self.collection.find({"vehicle_id": vehicle_id}).sort("timestamp_ms", -1).limit(limit)
-        return list(cursor)
-
-    def save_record(self, record: dict) -> None:
-        self.collection.insert_one(record)
 
 
 @dataclass
@@ -79,26 +55,18 @@ class HistoricalSnapshot:
     avg_battery_rul_pct: float | None = None
 
 
-def build_history_provider_from_env() -> HistoryProvider:
-    """Build history provider from environment settings."""
+def build_history_provider_from_env(backend: str | None = None) -> HistoryProvider:
+    """Build history provider from a lightweight backend selector.
 
-    backend = os.getenv("CLOUD_HISTORY_BACKEND", "mongo").strip().lower()
-    if backend == "memory":
+    Supported values:
+    - ``memory``: keep recent Section-6 records in process memory
+    - anything else: disable history persistence/fetching
+    """
+
+    selected = (backend or "").strip().lower()
+    if selected == "memory":
         return InMemoryHistoryProvider()
-
-    uri = os.getenv("CLOUD_MONGO_URI", "").strip()
-    if not uri:
-        return NoopHistoryProvider()
-
-    database = os.getenv("CLOUD_MONGO_DB", "cloud_ai")
-    collection = os.getenv("CLOUD_MONGO_COLLECTION", "section6_history")
-
-    try:
-        provider = MongoHistoryProvider(uri=uri, database=database, collection=collection)
-        provider.client.admin.command("ping")
-        return provider
-    except Exception:
-        return NoopHistoryProvider()
+    return NoopHistoryProvider()
 
 
 def _safe_mean(values: list[float]) -> float | None:

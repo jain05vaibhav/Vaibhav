@@ -133,41 +133,18 @@ Example analytical output (Section 7 style, advisory-only):
 ```
 
 
-## Historical data support (MongoDB)
+## Historical data support (in-memory)
 
 Yes — the cloud API can take **historical Section-6 data** into account during inference.
 
 At each `/analyze` call:
 
-1. It fetches recent records for the same `vehicle_id` (window size from `HISTORY_WINDOW_SIZE`, default `50`).
+1. It fetches recent records for the same `vehicle_id` (default window size: `50`).
 2. It blends current Section-6 values with historical averages.
 3. It predicts RUL and failure probability using these blended features.
 4. It stores the current Section-6 payload back to history for the next cycle.
 
-### Configure MongoDB backend
-
-```bash
-export CLOUD_MONGO_URI="mongodb://localhost:27017"
-export CLOUD_MONGO_DB="cloud_ai"
-export CLOUD_MONGO_COLLECTION="section6_history"
-export HISTORY_WINDOW_SIZE=50
-```
-
-Then start API normally:
-
-```bash
-uvicorn cloud_ai.cloud_api:app --host 0.0.0.0 --port 8000
-```
-
-If `CLOUD_MONGO_URI` is not set or unavailable, the API falls back safely to no-history mode.
-
-For local non-Mongo experimentation, you can use in-memory history:
-
-```bash
-export CLOUD_HISTORY_BACKEND=memory
-```
-
-`GET /health` reports which history backend is active (`mongo`, `memory`, or `none`).
+By default, the API runs with `history_backend: none` (history disabled). For local experiments and tests, use `InMemoryHistoryProvider` from code/tests and `/health` will report `history_backend: memory`.
 
 ## Validation
 
