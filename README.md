@@ -135,11 +135,11 @@ You should see all tests passing (`OK`).
 
 ### RUL model feature note (as requested)
 
-RUL training/inference uses only these three inputs:
+Each future RUL prediction uses only its own current subsystem RUL:
 
-- `engine_rul_pct`
-- `brake_rul_pct`
-- `battery_rul_pct`
+- `engine_rul_pct_future` is predicted using only `engine_rul_pct`
+- `brake_rul_pct_future` is predicted using only `brake_rul_pct`
+- `battery_rul_pct_future` is predicted using only `battery_rul_pct`
 
 ## 6) How to verify each part individually
 
@@ -191,7 +191,7 @@ Yes, this can be used for car analytics workflows, **but with conditions**:
 ### Minimal practical path for real car data
 
 1. Export historical processed records (CSV) with required columns used by the models.
-   - For RUL specifically, include: `engine_rul_pct`, `brake_rul_pct`, `battery_rul_pct`, and target `engine_rul_pct_future`.
+   - For RUL specifically, include current features `engine_rul_pct`, `brake_rul_pct`, `battery_rul_pct` and targets `engine_rul_pct_future`, `brake_rul_pct_future`, `battery_rul_pct_future`.
 2. Replace synthetic CSV with your historical CSV (same column names).
 3. Train models via:
    - `python -m cloud_ai.rul_model`

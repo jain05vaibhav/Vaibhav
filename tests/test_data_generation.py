@@ -26,6 +26,8 @@ class DataGenerationTests(unittest.TestCase):
                 "vehicle_health_score",
                 "brake_health_index",
                 "engine_rul_pct_future",
+                "brake_rul_pct_future",
+                "battery_rul_pct_future",
                 "failure_next_7_days",
             }
             self.assertTrue(required_cols.issubset(set(df.columns)))

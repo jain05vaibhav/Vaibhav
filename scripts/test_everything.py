@@ -16,7 +16,7 @@ from cloud_ai.data_generation import generate_synthetic_cloud_history
 from cloud_ai.explanation import explain_fault
 from cloud_ai.failure_model import FAILURE_FEATURES, train_failure_model
 from cloud_ai.recommendation import recommend_action
-from cloud_ai.rul_model import RUL_FEATURES, train_rul_model
+from cloud_ai.rul_model import predict_future_rul, train_rul_model
 from cloud_ai.schemas import CloudInput
 
 
@@ -53,23 +53,22 @@ def main() -> None:
             vehicle_health_score=0.64,
         )
 
-        rul_features = pd.DataFrame(
-            [
-                {
-                    "engine_rul_pct": payload.engine_rul_pct,
-                    "brake_rul_pct": payload.brake_rul_pct,
-                    "battery_rul_pct": payload.battery_rul_pct,
-                }
-            ]
-        )[RUL_FEATURES]
-        predicted_engine_rul_pct = max(0.0, min(100.0, float(rul_model.predict(rul_features)[0])))
+        future_rul = predict_future_rul(
+            rul_model,
+            engine_rul_pct=payload.engine_rul_pct,
+            brake_rul_pct=payload.brake_rul_pct,
+            battery_rul_pct=payload.battery_rul_pct,
+        )
+        predicted_engine_rul_pct = future_rul["engine"]
+        predicted_brake_rul_pct = future_rul["brake"]
+        predicted_battery_rul_pct = future_rul["battery"]
 
         failure_features = pd.DataFrame(
             [
                 {
                     "engine_rul_pct": predicted_engine_rul_pct,
-                    "brake_rul_pct": payload.brake_rul_pct,
-                    "battery_rul_pct": payload.battery_rul_pct,
+                    "brake_rul_pct": predicted_brake_rul_pct,
+                    "battery_rul_pct": predicted_battery_rul_pct,
                     "thermal_stress_index": payload.thermal_stress_index,
                     "mechanical_vibration_anomaly_score": payload.mechanical_vibration_anomaly_score,
                 }
@@ -81,13 +80,17 @@ def main() -> None:
         recommendation = recommend_action(
             failure_prob=failure_prob,
             engine_rul_pct=predicted_engine_rul_pct,
-            brake_rul_pct=payload.brake_rul_pct,
+            brake_rul_pct=predicted_brake_rul_pct,
             fault_primary=fault_primary,
         )
         print("[3/4] Local inference pipeline completed")
 
         if not 0.0 <= predicted_engine_rul_pct <= 100.0:
             raise RuntimeError("Predicted engine RUL out of range")
+        if not 0.0 <= predicted_brake_rul_pct <= 100.0:
+            raise RuntimeError("Predicted brake RUL out of range")
+        if not 0.0 <= predicted_battery_rul_pct <= 100.0:
+            raise RuntimeError("Predicted battery RUL out of range")
         if not 0.0 <= failure_prob <= 1.0:
             raise RuntimeError("Failure probability out of range")
         if not contributors:
@@ -98,7 +101,9 @@ def main() -> None:
         print(
             "[4/4] Advisory output validated:",
             {
-                "engine_rul_pct": round(predicted_engine_rul_pct, 2),
+                "engine_rul_pct_future": round(predicted_engine_rul_pct, 2),
+                "brake_rul_pct_future": round(predicted_brake_rul_pct, 2),
+                "battery_rul_pct_future": round(predicted_battery_rul_pct, 2),
                 "fault_failure_probability_7d": round(failure_prob, 2),
                 "fault_primary": fault_primary,
                 "fault_contributing_factors": contributors,

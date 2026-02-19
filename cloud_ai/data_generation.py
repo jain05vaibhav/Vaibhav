@@ -26,11 +26,9 @@ def generate_synthetic_cloud_history(
         100,
     )
 
-    engine_rul_pct_future = np.clip(
-        engine_rul_pct - 11 * thermal_stress_index - 7 * vibration_anomaly + rng.normal(0, 1.5, rows),
-        0,
-        100,
-    )
+    engine_rul_pct_future = np.clip(engine_rul_pct - rng.uniform(1.5, 10.0, rows) + rng.normal(0, 1.2, rows), 0, 100)
+    brake_rul_pct_future = np.clip(brake_rul_pct - rng.uniform(2.0, 12.0, rows) + rng.normal(0, 1.2, rows), 0, 100)
+    battery_rul_pct_future = np.clip(battery_rul_pct - rng.uniform(1.0, 8.0, rows) + rng.normal(0, 1.0, rows), 0, 100)
 
     failure_next_7_days = (
         (engine_rul_pct < 45)
@@ -56,6 +54,8 @@ def generate_synthetic_cloud_history(
             "vehicle_health_score": np.round(vehicle_health, 4),
             "brake_health_index": np.round(brake_rul_pct / 100.0, 4),
             "engine_rul_pct_future": np.round(engine_rul_pct_future, 3),
+            "brake_rul_pct_future": np.round(brake_rul_pct_future, 3),
+            "battery_rul_pct_future": np.round(battery_rul_pct_future, 3),
             "failure_next_7_days": failure_next_7_days,
         }
     )

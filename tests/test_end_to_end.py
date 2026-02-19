@@ -9,7 +9,7 @@ from cloud_ai.data_generation import generate_synthetic_cloud_history
 from cloud_ai.explanation import explain_fault
 from cloud_ai.failure_model import FAILURE_FEATURES, train_failure_model
 from cloud_ai.recommendation import recommend_action
-from cloud_ai.rul_model import RUL_FEATURES, train_rul_model
+from cloud_ai.rul_model import predict_future_rul, train_rul_model
 from cloud_ai.schemas import CloudInput
 
 
@@ -44,23 +44,22 @@ class EndToEndCloudAITests(unittest.TestCase):
                 vehicle_health_score=0.64,
             )
 
-            rul_vector = pd.DataFrame(
-                [
-                    {
-                        "engine_rul_pct": payload.engine_rul_pct,
-                        "brake_rul_pct": payload.brake_rul_pct,
-                        "battery_rul_pct": payload.battery_rul_pct,
-                    }
-                ]
-            )[RUL_FEATURES]
-            predicted_engine_rul_pct = max(0.0, min(100.0, float(rul_model.predict(rul_vector)[0])))
+            future_rul = predict_future_rul(
+                rul_model,
+                engine_rul_pct=payload.engine_rul_pct,
+                brake_rul_pct=payload.brake_rul_pct,
+                battery_rul_pct=payload.battery_rul_pct,
+            )
+            predicted_engine_rul_pct = future_rul["engine"]
+            predicted_brake_rul_pct = future_rul["brake"]
+            predicted_battery_rul_pct = future_rul["battery"]
 
             failure_vector = pd.DataFrame(
                 [
                     {
                         "engine_rul_pct": predicted_engine_rul_pct,
-                        "brake_rul_pct": payload.brake_rul_pct,
-                        "battery_rul_pct": payload.battery_rul_pct,
+                        "brake_rul_pct": predicted_brake_rul_pct,
+                        "battery_rul_pct": predicted_battery_rul_pct,
                         "thermal_stress_index": payload.thermal_stress_index,
                         "mechanical_vibration_anomaly_score": payload.mechanical_vibration_anomaly_score,
                     }
@@ -72,12 +71,16 @@ class EndToEndCloudAITests(unittest.TestCase):
             recommendation = recommend_action(
                 failure_prob=failure_prob,
                 engine_rul_pct=predicted_engine_rul_pct,
-                brake_rul_pct=payload.brake_rul_pct,
+                brake_rul_pct=predicted_brake_rul_pct,
                 fault_primary=fault_primary,
             )
 
             self.assertGreaterEqual(predicted_engine_rul_pct, 0.0)
             self.assertLessEqual(predicted_engine_rul_pct, 100.0)
+            self.assertGreaterEqual(predicted_brake_rul_pct, 0.0)
+            self.assertLessEqual(predicted_brake_rul_pct, 100.0)
+            self.assertGreaterEqual(predicted_battery_rul_pct, 0.0)
+            self.assertLessEqual(predicted_battery_rul_pct, 100.0)
             self.assertGreaterEqual(failure_prob, 0.0)
             self.assertLessEqual(failure_prob, 1.0)
             self.assertIsInstance(fault_primary, str)
