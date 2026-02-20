@@ -4,7 +4,7 @@ from pathlib import Path
 
 from cloud_ai.data_generation import generate_synthetic_cloud_history
 from cloud_ai.failure_model import train_failure_model
-from cloud_ai.rul_model import train_rul_model
+from cloud_ai.rul_model import train_rul_models
 
 
 def run_training_pipeline(output_dir: str = ".", rows: int = 1000, seed: int = 42) -> dict[str, str]:
@@ -20,7 +20,7 @@ def run_training_pipeline(output_dir: str = ".", rows: int = 1000, seed: int = 4
         rows=rows,
         seed=seed,
     )
-    train_rul_model(data_path=str(dataset_path), model_path=str(rul_model_path))
+    train_rul_models(data_path=str(dataset_path))
     train_failure_model(data_path=str(dataset_path), model_path=str(failure_model_path))
 
     return {

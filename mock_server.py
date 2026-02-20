@@ -32,10 +32,34 @@ MOCK_DATA = {
 }
 
 
+import random
+import time
+
 @app.get("/api/mock/source")
 def get_mock_source(limit: int = 50):
-    # Return a list of records
-    return [MOCK_DATA] * limit
+    # Return a list of records with slightly varying data
+    results = []
+    current_time_ms = int(time.time() * 1000)
+    
+    for i in range(limit):
+        # We decrement the time so index 0 is the newest (live) data, and older records are further back in time
+        ts = current_time_ms - (i * 10000)
+        
+        record = MOCK_DATA.copy()
+        record["timestamp_ms"] = ts
+        record["thermal_stress_index"] = round(random.uniform(0.6, 0.95), 2)
+        record["mechanical_vibration_anomaly_score"] = round(random.uniform(0.5, 0.9), 2)
+        record["electrical_charging_efficiency_score"] = round(random.uniform(0.7, 0.99), 2)
+        
+        # Simulate slight wear and tear over the numeric fields
+        record["engine_rul_pct"] = round(random.uniform(25.0, 35.0), 2)
+        record["brake_rul_pct"] = round(random.uniform(20.0, 30.0), 2)
+        record["battery_rul_pct"] = round(random.uniform(85.0, 95.0), 2)
+        record["vehicle_health_score"] = round(random.uniform(0.5, 0.8), 2)
+        
+        results.append(record)
+        
+    return results
 
 @app.post("/api/mock/destination")
 async def post_mock_destination(request: Request):
@@ -48,4 +72,4 @@ async def post_mock_destination(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -32,7 +32,10 @@ POLL_INTERVAL_SEC = int(os.getenv("POLL_INTERVAL_SEC", "10"))
 VEHICLES_TO_MONITOR = [v.strip() for v in os.getenv("VEHICLES_TO_MONITOR", "V-123").split(",") if v.strip()]
 
 # Paths for models
-RUL_MODEL_PATH = Path("cloud_ai") / "rul_model.pkl" if (Path("cloud_ai") / "rul_model.pkl").exists() else Path("rul_model.pkl")
+ENGINE_RUL_MODEL_PATH = Path("cloud_ai") / "engine_rul_model.pkl" if (Path("cloud_ai") / "engine_rul_model.pkl").exists() else Path("engine_rul_model.pkl")
+BRAKE_RUL_MODEL_PATH = Path("cloud_ai") / "brake_rul_model.pkl" if (Path("cloud_ai") / "brake_rul_model.pkl").exists() else Path("brake_rul_model.pkl")
+BATTERY_RUL_MODEL_PATH = Path("cloud_ai") / "battery_rul_model.pkl" if (Path("cloud_ai") / "battery_rul_model.pkl").exists() else Path("battery_rul_model.pkl")
+
 FAILURE_MODEL_PATH = Path("cloud_ai") / "failure_model.pkl" if (Path("cloud_ai") / "failure_model.pkl").exists() else Path("failure_model.pkl")
 
 
@@ -40,12 +43,17 @@ class CloudAIPipeline:
     """Encapsulates the ML models and prediction logic."""
 
     def __init__(self):
-        if not RUL_MODEL_PATH.exists() or not FAILURE_MODEL_PATH.exists():
-            raise RuntimeError(
-                f"Model files not found. Needed: {RUL_MODEL_PATH} and {FAILURE_MODEL_PATH}"
-            )
-        logger.info("Loading RUL and Failure models...")
-        self.rul_model = joblib.load(RUL_MODEL_PATH)
+        missing_models = [
+            m for m in [ENGINE_RUL_MODEL_PATH, BRAKE_RUL_MODEL_PATH, BATTERY_RUL_MODEL_PATH, FAILURE_MODEL_PATH]
+            if not m.exists()
+        ]
+        if missing_models:
+            raise RuntimeError(f"Model files not found: {missing_models}")
+            
+        logger.info("Loading Engine, Brake, Battery RUL, and Failure models...")
+        self.engine_rul_model = joblib.load(ENGINE_RUL_MODEL_PATH)
+        self.brake_rul_model = joblib.load(BRAKE_RUL_MODEL_PATH)
+        self.battery_rul_model = joblib.load(BATTERY_RUL_MODEL_PATH)
         self.failure_model = joblib.load(FAILURE_MODEL_PATH)
         logger.info("Models loaded successfully.")
 
@@ -74,7 +82,7 @@ class CloudAIPipeline:
         # 2. Summarize historical data
         history_snapshot = summarize_history(history_records)
 
-        # 3. Blend and predict Engine RUL
+        # 3. Blend and predict RULs (Engine, Brake, Battery)
         rul_feature_map = {
             "thermal_stress_index": blend(data.thermal_stress_index, history_snapshot.avg_thermal_stress_index),
             "brake_health_index": blend(data.brake_rul_pct / 100.0, None if history_snapshot.avg_brake_rul_pct is None else history_snapshot.avg_brake_rul_pct / 100.0),
@@ -83,13 +91,21 @@ class CloudAIPipeline:
             "vehicle_health_score": blend(data.vehicle_health_score, history_snapshot.avg_vehicle_health_score),
         }
         rul_vector = pd.DataFrame([rul_feature_map])[RUL_FEATURES]
-        predicted_engine_rul_pct = float(self.rul_model.predict(rul_vector)[0])
+        
+        predicted_engine_rul_pct = float(self.engine_rul_model.predict(rul_vector)[0])
         predicted_engine_rul_pct = max(0.0, min(100.0, predicted_engine_rul_pct))
+        
+        predicted_brake_rul_pct = float(self.brake_rul_model.predict(rul_vector)[0])
+        predicted_brake_rul_pct = max(0.0, min(100.0, predicted_brake_rul_pct))
+        
+        predicted_battery_rul_pct = float(self.battery_rul_model.predict(rul_vector)[0])
+        predicted_battery_rul_pct = max(0.0, min(100.0, predicted_battery_rul_pct))
 
         # 4. Blend and predict Failure Probability
+        # For failure probability, we now use our newly modeled and predicted RULs blended with historic averages
         blended_engine_rul_for_failure = blend(predicted_engine_rul_pct, history_snapshot.avg_engine_rul_pct)
-        blended_brake_rul_for_failure = blend(data.brake_rul_pct, history_snapshot.avg_brake_rul_pct)
-        blended_battery_rul_for_failure = blend(data.battery_rul_pct, history_snapshot.avg_battery_rul_pct)
+        blended_brake_rul_for_failure = blend(predicted_brake_rul_pct, history_snapshot.avg_brake_rul_pct)
+        blended_battery_rul_for_failure = blend(predicted_battery_rul_pct, history_snapshot.avg_battery_rul_pct)
         blended_thermal_stress_for_failure = blend(data.thermal_stress_index, history_snapshot.avg_thermal_stress_index)
         blended_vibration_for_failure = blend(
             data.mechanical_vibration_anomaly_score,
@@ -114,8 +130,8 @@ class CloudAIPipeline:
         recommendation = recommend_action(
             failure_prob=failure_prob,
             engine_rul_pct=predicted_engine_rul_pct,
-            brake_rul_pct=data.brake_rul_pct,
-            battery_rul_pct=data.battery_rul_pct,
+            brake_rul_pct=predicted_brake_rul_pct,
+            battery_rul_pct=predicted_battery_rul_pct,
             fault_primary=fault_primary,
             contributing_factors=contributors,
         )
@@ -124,8 +140,8 @@ class CloudAIPipeline:
         return {
             "source_id": "cloud_ai_agent",
             "engine_rul_pct": round(predicted_engine_rul_pct, 2),
-            "brake_rul_pct": round(data.brake_rul_pct, 2),
-            "battery_rul_pct": round(data.battery_rul_pct, 2),
+            "brake_rul_pct": round(predicted_brake_rul_pct, 2),
+            "battery_rul_pct": round(predicted_battery_rul_pct, 2),
             "fault_primary": fault_primary,
             "fault_contributing_factor": contributors,
             "fault_failure_probability": round(failure_prob, 2),
