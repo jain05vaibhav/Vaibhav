@@ -169,6 +169,26 @@ export CLOUD_HISTORY_BACKEND=memory
 
 `GET /health` reports which history backend is active (`mongo`, `memory`, or `none`).
 
+## Groq LLM recommendations (optional)
+
+The recommendation engine can use the **Groq API** for AI-generated maintenance advice.
+When configured, Groq produces context-aware recommendations based on the full fault analysis.
+If Groq is unavailable or errors, the system **automatically falls back** to the built-in rule-based engine.
+
+### Configure Groq
+
+```bash
+export GROQ_API_KEY="gsk_your_key_here"
+# Optional: override the default model (default: llama-3.3-70b-versatile)
+export GROQ_MODEL="llama-3.3-70b-versatile"
+```
+
+Without `GROQ_API_KEY`, the API uses rule-based recommendations only (no Groq calls).
+
+`GET /health` reports `"groq_configured": true/false`.
+
+The recommendation output includes `"recommendation_source"`: either `"groq"` or `"rule_based"`.
+
 ## Validation
 
 Run the full local validation suite:

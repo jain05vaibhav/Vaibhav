@@ -27,6 +27,7 @@ class Recommendation(BaseModel):
     recommendation_service_priority: str
     recommendation_suggested_action: str
     recommendation_safe_operating_limit_km: int
+    recommendation_source: str = "rule_based"
 
 
 class CloudOutput(BaseModel):

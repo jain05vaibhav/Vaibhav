@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass
 
 import joblib
 import pandas as pd
@@ -43,7 +50,7 @@ def load_models() -> None:
 
 
 @app.get("/health")
-def health() -> dict[str, str | int]:
+def health() -> dict[str, Any]:
     backend_name = ModelRegistry.history_provider.__class__.__name__
     if backend_name == "MongoHistoryProvider":
         history_backend = "mongo"
@@ -57,6 +64,7 @@ def health() -> dict[str, str | int]:
         "authority": "cloud_has_no_actuation_control",
         "history_backend": history_backend,
         "history_window_size": int(os.getenv("HISTORY_WINDOW_SIZE", "50")),
+        "groq_configured": bool(os.getenv("GROQ_API_KEY", "")),
     }
 
 
@@ -111,7 +119,9 @@ def analyze(data: CloudInput) -> CloudOutput:
         failure_prob=failure_prob,
         engine_rul_pct=predicted_engine_rul_pct,
         brake_rul_pct=data.brake_rul_pct,
+        battery_rul_pct=data.battery_rul_pct,
         fault_primary=fault_primary,
+        contributing_factors=contributors,
     )
 
     ModelRegistry.history_provider.save_record(data.model_dump())
