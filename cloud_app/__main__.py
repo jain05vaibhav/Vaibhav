@@ -10,8 +10,6 @@ from dotenv import load_dotenv
 from cloud_ai.explanation import explain_fault
 from cloud_ai.failure_model import FAILURE_FEATURES
 from cloud_ai.history import blend, summarize_history
-from cloud_ai.battery_trend import compute_battery_trend
-from cloud_ai.driver_aggression import compute_aggression
 from cloud_ai.recommendation import recommend_action
 from cloud_ai.rul_model import RUL_FEATURES
 from cloud_ai.schemas import CloudInput
@@ -31,7 +29,7 @@ SOURCE_GET_API_URL = os.getenv("SOURCE_GET_API_URL", "http://localhost:8000/api/
 DESTINATION_POST_API_URL = os.getenv("DESTINATION_POST_API_URL", "http://localhost:8000/api/mock/destination")
 POINTS_TO_FETCH = int(os.getenv("POINTS_TO_FETCH", "10"))
 POLL_INTERVAL_SEC = int(os.getenv("POLL_INTERVAL_SEC", "10"))
-VEHICLES_TO_MONITOR = [v.strip() for v in os.getenv("VEHICLES_TO_MONITOR", "VIT_CAR_001").split(",") if v.strip()]
+VEHICLES_TO_MONITOR = [v.strip() for v in os.getenv("VEHICLES_TO_MONITOR", "V-123").split(",") if v.strip()]
 
 # Paths for models
 ENGINE_RUL_MODEL_PATH = Path("cloud_ai") / "engine_rul_model.pkl" if (Path("cloud_ai") / "engine_rul_model.pkl").exists() else Path("engine_rul_model.pkl")
@@ -164,9 +162,8 @@ def poll_and_forward(pipeline: CloudAIPipeline, vehicle_id: str):
         response = requests.get(url_with_params, timeout=10)
         response.raise_for_status()
         
-        import json
         data_payload = response.json()
-        logger.info(f"Data received from source API:\n{json.dumps(data_payload, indent=2)}")
+        
         # Handle cases where the endpoint returns a list of history records, or a dict.
         # We'll normalize it to a list of records representing the vehicle's history.
         if isinstance(data_payload, dict):
@@ -194,25 +191,9 @@ def poll_and_forward(pipeline: CloudAIPipeline, vehicle_id: str):
         
         # 3. Process the history array through the AI pipeline
         ai_insights = pipeline.process_vehicle_data(history_records)
-
-        # 3b. Compute driver aggression score from telemetry fields
-        aggression_scores = compute_aggression(current_record, history_records)
-        logger.info(
-            "Driver aggression score: %.3f  |  stress amplification: %.3f",
-            aggression_scores["usage_driver_aggression_score"],
-            aggression_scores["usage_stress_amplification_factor"],
-        )
-
-        # 3c. Compute battery degradation trend using AI-predicted RUL
-        battery_trend = compute_battery_trend(
-            current_record=current_record,
-            history_records=history_records,
-            ai_battery_rul_pct=ai_insights.get("battery_rul_pct"),
-        )
-        logger.info("Battery degradation trend: %s", battery_trend["electrical_battery_degradation_trend"])
-
-        # 4. Merge original record + AI insights + aggression + battery trend
-        forward_payload = {**current_record, **ai_insights, **aggression_scores, **battery_trend}
+        
+        # 4. Merge original record + AI insights
+        forward_payload = {**current_record, **ai_insights}
 
         # Map _id → source_id
         forward_payload["source_id"] = str(current_record.get("_id", "unknown"))
@@ -224,6 +205,11 @@ def poll_and_forward(pipeline: CloudAIPipeline, vehicle_id: str):
             if int_field in forward_payload:
                 forward_payload[int_field] = int(forward_payload[int_field])
 
+        # Placeholder fields not present in source data
+        forward_payload.setdefault("electrical_battery_degradation_trend", "stable")
+        forward_payload.setdefault("usage_driver_aggression_score", 0.5)
+        forward_payload.setdefault("usage_stress_amplification_factor", 1.0)
+
         # Remove fields NOT in backend schema
         for extra in ("processing_meta", "ingested_at", "electrical_battery_health_pct"):
             forward_payload.pop(extra, None)
@@ -233,8 +219,8 @@ def poll_and_forward(pipeline: CloudAIPipeline, vehicle_id: str):
         logger.info(f"Payload being sent to {DESTINATION_POST_API_URL}:\n{json.dumps(forward_payload, indent=2, default=str)}")
         post_response = requests.post(DESTINATION_POST_API_URL, json=forward_payload, timeout=10)
         post_response.raise_for_status()
-        
-        logger.info(f"Successfully processed and forwarded data for vehicle {forward_payload.get('vehicle_id', "unknown")}.")
+
+        logger.info(f"Successfully processed and forwarded data for vehicle {forward_payload.get('vehicle_id', 'unknown')}.")
 
     except requests.RequestException as e:
         logger.error(f"HTTP Request failed: {e}")
